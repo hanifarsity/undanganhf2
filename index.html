@@ -2483,29 +2483,30 @@
         // OPEN INVITATION & HOME
         // ============================================================
         function openInvitation() {
-            document.getElementById('cover').style.display = 'none';
-            document.getElementById('main').style.display = 'block';
-            document.getElementById('main').scrollIntoView({ behavior: 'smooth' });
-            startCountdown();
-            loadWishesFromFirebase();
-            updateOnlineStatus();
-            updateShareLink();
-            
-            setTimeout(() => {
-                document.getElementById('homeBtn').classList.add('show');
-            }, 500);
+    document.getElementById('cover').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('main').scrollIntoView({ behavior: 'smooth' });
+    startCountdown();
+    loadWishesFromFirebase();
+    updateOnlineStatus();
+    updateShareLink();
+    
+    // 🔥 AUTO PLAY MUSIK - Tambahkan ini
+    setTimeout(() => {
+        if (!audioCtx) {
+            audioCtx = new(window.AudioContext || window.webkitAudioContext)();
         }
-
-        function goToHome() {
-            document.getElementById('cover').style.display = 'flex';
-            document.getElementById('main').style.display = 'none';
-            document.getElementById('appContainer').scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
-            document.getElementById('homeBtn').classList.remove('show');
-        }
-
+        loadMusic();
+        // Update tombol
+        const btn = document.getElementById('musicBtn');
+        btn.classList.remove('off');
+        btn.innerHTML = '<i class="fas fa-music"></i>';
+    }, 500);
+    
+    setTimeout(() => {
+        document.getElementById('homeBtn').classList.add('show');
+    }, 500);
+}
         // ============================================================
         // 🔗 SHARE LINK
         // ============================================================
@@ -2845,23 +2846,98 @@
             setTimeout(updateOnlineCount, 5000);
         }
 
-        // ============================================================
-        // MUSIC
-        // ============================================================
-        let musicPlaying = false;
-        let audioCtx = null;
-        let musicInterval = null;
+      // ============================================================
+// MUSIC - AUTO PLAY & TOGGLE
+// ============================================================
+let musicPlaying = false;
+let audioCtx = null;
+let musicInterval = null;
+let isMusicLoaded = false;
 
-        function toggleMusic() {
-    const btn = document.getElementById('musicBtn');
+// Fungsi untuk memulai musik (dipanggil setelah user interaksi)
+function startMusic() {
     if (!audioCtx) {
         audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-        playSoftMelody();
-        musicPlaying = true;
-        btn.classList.remove('off');
-        btn.innerHTML = '<i class="fas fa-music"></i>';
-    } else if (musicPlaying) {
-        // Stop musik
+    }
+    if (!isMusicLoaded) {
+        loadMusic();
+    } else {
+        resumeMusic();
+    }
+}
+
+// Fungsi untuk memuat musik
+function loadMusic() {
+    if (!audioCtx) return;
+    
+    const musicUrl = 'backsound.mp3';
+    
+    fetch(musicUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('File musik tidak ditemukan! Cek nama file: ' + musicUrl);
+            }
+            return response.arrayBuffer();
+        })
+        .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+        .then(audioBuffer => {
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.loop = true;
+            
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.3;
+            
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            source.start();
+            
+            window.currentSource = source;
+            window.currentGainNode = gainNode;
+            isMusicLoaded = true;
+            musicPlaying = true;
+            
+            // Update tombol
+            const btn = document.getElementById('musicBtn');
+            btn.classList.remove('off');
+            btn.innerHTML = '<i class="fas fa-music"></i>';
+            
+            console.log('✅ Musik berhasil dimuat dan diputar!');
+        })
+        .catch(error => {
+            console.error('❌ Error loading music:', error);
+            // Fallback ke nada sintetis
+            playFallbackMelody();
+        });
+}
+
+// Fungsi untuk melanjutkan musik
+function resumeMusic() {
+    if (!audioCtx) return;
+    audioCtx.resume();
+    musicPlaying = true;
+    const btn = document.getElementById('musicBtn');
+    btn.classList.remove('off');
+    btn.innerHTML = '<i class="fas fa-music"></i>';
+    
+    if (window.currentSource && window.currentGainNode) {
+        // Musik sudah berjalan, lanjutkan
+    }
+}
+
+// Fungsi toggle musik (On/Off)
+function toggleMusic() {
+    const btn = document.getElementById('musicBtn');
+    
+    if (!audioCtx) {
+        // Pertama kali klik
+        audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+        loadMusic();
+        return;
+    }
+    
+    if (musicPlaying) {
+        // Matikan musik
         if (window.currentSource) {
             try {
                 window.currentSource.stop();
@@ -2879,14 +2955,72 @@
             clearTimeout(musicInterval);
             musicInterval = null;
         }
+        console.log('🔇 Musik dimatikan');
     } else {
+        // Nyalakan musik
         audioCtx.resume();
-        musicPlaying = true;
-        btn.classList.remove('off');
-        btn.innerHTML = '<i class="fas fa-music"></i>';
-        playSoftMelody();
+        if (!isMusicLoaded) {
+            loadMusic();
+        } else {
+            musicPlaying = true;
+            btn.classList.remove('off');
+            btn.innerHTML = '<i class="fas fa-music"></i>';
+            // Re-play musik
+            if (window.currentSource) {
+                try {
+                    window.currentSource.stop();
+                } catch(e) {}
+            }
+            // Load ulang
+            isMusicLoaded = false;
+            loadMusic();
+        }
+        console.log('🔊 Musik dinyalakan');
     }
 }
+
+// Fungsi fallback jika MP3 tidak ditemukan
+function playFallbackMelody() {
+    if (!audioCtx || !musicPlaying) return;
+    const notes = [523.25, 587.33, 659.25, 783.99, 880.00, 987.77, 1174.66, 1318.51];
+    let index = 0;
+
+    function playNote() {
+        if (!musicPlaying || !audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = notes[index % notes.length];
+        gain.gain.setValueAtTime(0.025, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.8);
+        index++;
+        musicInterval = setTimeout(playNote, 1400 + Math.random() * 500);
+    }
+    musicInterval = setTimeout(playNote, 400);
+}
+
+// ============================================================
+// AUTO PLAY MUSIC - Dipanggil saat buka undangan
+// ============================================================
+function autoPlayMusic() {
+    // Coba mainkan musik (perlu interaksi user)
+    // Browser biasanya memblokir autoplay, jadi kita coba dengan cara ini
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    
+    // Jika musik belum dimuat, muat
+    if (!isMusicLoaded) {
+        loadMusic();
+    }
+}
+
+// Panggil autoPlayMusic setelah user membuka undangan
+// Tambahkan di dalam fungsi openInvitation()
 
         // ============================================================
 // MUSIC MP3
