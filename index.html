@@ -2493,15 +2493,8 @@
     
     // 🔥 AUTO PLAY MUSIK - Tambahkan ini
     setTimeout(() => {
-        if (!audioCtx) {
-            audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-        }
-        loadMusic();
-        // Update tombol
-        const btn = document.getElementById('musicBtn');
-        btn.classList.remove('off');
-        btn.innerHTML = '<i class="fas fa-music"></i>';
-    }, 500);
+        autoPlayMusic();
+    }, 600);
     
     setTimeout(() => {
         document.getElementById('homeBtn').classList.add('show');
@@ -2849,51 +2842,55 @@
       // ============================================================
 // MUSIC - AUTO PLAY & TOGGLE
 // ============================================================
+// ============================================================
+// MUSIC - FIXED VERSION
+// ============================================================
 let musicPlaying = false;
 let audioCtx = null;
 let musicInterval = null;
 let isMusicLoaded = false;
+let musicSource = null;
 
-// Fungsi untuk memulai musik (dipanggil setelah user interaksi)
-function startMusic() {
+// Fungsi untuk memuat dan memutar musik
+function loadAndPlayMusic() {
     if (!audioCtx) {
         audioCtx = new(window.AudioContext || window.webkitAudioContext)();
     }
-    if (!isMusicLoaded) {
-        loadMusic();
-    } else {
-        resumeMusic();
+    
+    // Resume AudioContext (diperlukan untuk bunyi)
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
     }
-}
-
-// Fungsi untuk memuat musik
-function loadMusic() {
-    if (!audioCtx) return;
     
     const musicUrl = 'backsound.mp3';
     
     fetch(musicUrl)
         .then(response => {
             if (!response.ok) {
-                throw new Error('File musik tidak ditemukan! Cek nama file: ' + musicUrl);
+                throw new Error('File musik tidak ditemukan: ' + musicUrl);
             }
             return response.arrayBuffer();
         })
         .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
         .then(audioBuffer => {
+            // Stop sumber lama jika ada
+            if (musicSource) {
+                try { musicSource.stop(); } catch(e) {}
+                musicSource = null;
+            }
+            
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffer;
             source.loop = true;
             
             const gainNode = audioCtx.createGain();
-            gainNode.gain.value = 0.3;
+            gainNode.gain.value = 0.3; // Volume (0.1 - 1.0)
             
             source.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            source.start();
+            source.start(0);
             
-            window.currentSource = source;
-            window.currentGainNode = gainNode;
+            musicSource = source;
             isMusicLoaded = true;
             musicPlaying = true;
             
@@ -2902,27 +2899,13 @@ function loadMusic() {
             btn.classList.remove('off');
             btn.innerHTML = '<i class="fas fa-music"></i>';
             
-            console.log('✅ Musik berhasil dimuat dan diputar!');
+            console.log('✅ Musik berhasil diputar!');
         })
         .catch(error => {
-            console.error('❌ Error loading music:', error);
+            console.error('❌ Error:', error.message);
             // Fallback ke nada sintetis
-            playFallbackMelody();
+            playFallbackMusic();
         });
-}
-
-// Fungsi untuk melanjutkan musik
-function resumeMusic() {
-    if (!audioCtx) return;
-    audioCtx.resume();
-    musicPlaying = true;
-    const btn = document.getElementById('musicBtn');
-    btn.classList.remove('off');
-    btn.innerHTML = '<i class="fas fa-music"></i>';
-    
-    if (window.currentSource && window.currentGainNode) {
-        // Musik sudah berjalan, lanjutkan
-    }
 }
 
 // Fungsi toggle musik (On/Off)
@@ -2930,25 +2913,21 @@ function toggleMusic() {
     const btn = document.getElementById('musicBtn');
     
     if (!audioCtx) {
-        // Pertama kali klik
+        // Pertama kali klik - buat context dan play
         audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-        loadMusic();
+        loadAndPlayMusic();
         return;
     }
     
     if (musicPlaying) {
-        // Matikan musik
-        if (window.currentSource) {
-            try {
-                window.currentSource.stop();
-            } catch(e) {}
-            window.currentSource = null;
-        }
-        if (window.currentGainNode) {
-            window.currentGainNode = null;
+        // MATIKAN MUSIK
+        if (musicSource) {
+            try { musicSource.stop(); } catch(e) {}
+            musicSource = null;
         }
         audioCtx.suspend();
         musicPlaying = false;
+        isMusicLoaded = false;
         btn.classList.add('off');
         btn.innerHTML = '<i class="fas fa-volume-mute"></i>';
         if (musicInterval) {
@@ -2957,53 +2936,57 @@ function toggleMusic() {
         }
         console.log('🔇 Musik dimatikan');
     } else {
-        // Nyalakan musik
+        // NYALAKAN MUSIK
         audioCtx.resume();
         if (!isMusicLoaded) {
-            loadMusic();
+            loadAndPlayMusic();
         } else {
-            musicPlaying = true;
-            btn.classList.remove('off');
-            btn.innerHTML = '<i class="fas fa-music"></i>';
-            // Re-play musik
-            if (window.currentSource) {
-                try {
-                    window.currentSource.stop();
-                } catch(e) {}
-            }
-            // Load ulang
+            // Jika sudah dimuat tapi berhenti, replay
             isMusicLoaded = false;
-            loadMusic();
+            loadAndPlayMusic();
         }
+        musicPlaying = true;
+        btn.classList.remove('off');
+        btn.innerHTML = '<i class="fas fa-music"></i>';
         console.log('🔊 Musik dinyalakan');
     }
 }
 
-// Fungsi fallback jika MP3 tidak ditemukan
-function playFallbackMelody() {
+// Fungsi fallback (nada sintetis)
+function playFallbackMusic() {
     if (!audioCtx || !musicPlaying) return;
+    
     const notes = [523.25, 587.33, 659.25, 783.99, 880.00, 987.77, 1174.66, 1318.51];
     let index = 0;
 
     function playNote() {
         if (!musicPlaying || !audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.value = notes[index % notes.length];
-        gain.gain.setValueAtTime(0.025, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.8);
-        index++;
-        musicInterval = setTimeout(playNote, 1400 + Math.random() * 500);
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.value = notes[index % notes.length];
+            gain.gain.setValueAtTime(0.025, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.8);
+            index++;
+            musicInterval = setTimeout(playNote, 1400 + Math.random() * 500);
+        } catch(e) {}
     }
     musicInterval = setTimeout(playNote, 400);
 }
 
-// ============================================================
+// Fungsi auto play (dipanggil saat buka undangan)
+function autoPlayMusic() {
+    if (!audioCtx) {
+        audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+    }
+    loadAndPlayMusic();
+}
+        // ============================================================
 // AUTO PLAY MUSIC - Dipanggil saat buka undangan
 // ============================================================
 function autoPlayMusic() {
