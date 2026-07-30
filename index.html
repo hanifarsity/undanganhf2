@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Nurhanifah & Farid - Premium Wedding Invitation</title>
+    <title>HF Wedding Invitation</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2853,54 +2853,104 @@
         let musicInterval = null;
 
         function toggleMusic() {
-            const btn = document.getElementById('musicBtn');
-            if (!audioCtx) {
-                audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-                playSoftMelody();
-                musicPlaying = true;
-                btn.classList.remove('off');
-                btn.innerHTML = '<i class="fas fa-music"></i>';
-            } else if (musicPlaying) {
-                audioCtx.suspend();
-                musicPlaying = false;
-                btn.classList.add('off');
-                btn.innerHTML = '<i class="fas fa-volume-mute"></i>';
-                if (musicInterval) {
-                    clearTimeout(musicInterval);
-                    musicInterval = null;
-                }
-            } else {
-                audioCtx.resume();
-                musicPlaying = true;
-                btn.classList.remove('off');
-                btn.innerHTML = '<i class="fas fa-music"></i>';
-                playSoftMelody();
-            }
+    const btn = document.getElementById('musicBtn');
+    if (!audioCtx) {
+        audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+        playSoftMelody();
+        musicPlaying = true;
+        btn.classList.remove('off');
+        btn.innerHTML = '<i class="fas fa-music"></i>';
+    } else if (musicPlaying) {
+        // Stop musik
+        if (window.currentSource) {
+            try {
+                window.currentSource.stop();
+            } catch(e) {}
+            window.currentSource = null;
         }
-
-        function playSoftMelody() {
-            if (!audioCtx || !musicPlaying) return;
-            const notes = [523.25, 587.33, 659.25, 783.99, 880.00, 987.77, 1174.66, 1318.51];
-            let index = 0;
-
-            function playNote() {
-                if (!musicPlaying || !audioCtx) return;
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.type = 'sine';
-                osc.frequency.value = notes[index % notes.length];
-                gain.gain.setValueAtTime(0.025, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.8);
-                index++;
-                musicInterval = setTimeout(playNote, 1400 + Math.random() * 500);
-            }
-            musicInterval = setTimeout(playNote, 400);
+        if (window.currentGainNode) {
+            window.currentGainNode = null;
         }
+        audioCtx.suspend();
+        musicPlaying = false;
+        btn.classList.add('off');
+        btn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+        if (musicInterval) {
+            clearTimeout(musicInterval);
+            musicInterval = null;
+        }
+    } else {
+        audioCtx.resume();
+        musicPlaying = true;
+        btn.classList.remove('off');
+        btn.innerHTML = '<i class="fas fa-music"></i>';
+        playSoftMelody();
+    }
+}
 
+        // ============================================================
+// MUSIC MP3
+// ============================================================
+function playSoftMelody() {
+    if (!audioCtx || !musicPlaying) return;
+    
+    // Ganti 'backsound.mp3' dengan nama file MP3 Anda
+    const musicUrl = 'backsound.mp3';
+    
+    fetch(musicUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('File musik tidak ditemukan!');
+            }
+            return response.arrayBuffer();
+        })
+        .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+        .then(audioBuffer => {
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.loop = true; // Musik akan berulang otomatis
+            
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.3; // Volume (0.1 = pelan, 0.5 = sedang, 1.0 = keras)
+            
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            source.start();
+            
+            // Simpan referensi untuk stop
+            window.currentSource = source;
+            window.currentGainNode = gainNode;
+        })
+        .catch(error => {
+            console.error('Error loading music:', error);
+            // Fallback ke nada sintetis jika MP3 tidak ditemukan
+            playFallbackMelody();
+        });
+}
+
+// Fungsi fallback jika MP3 tidak ditemukan
+function playFallbackMelody() {
+    if (!audioCtx || !musicPlaying) return;
+    const notes = [523.25, 587.33, 659.25, 783.99, 880.00, 987.77, 1174.66, 1318.51];
+    let index = 0;
+
+    function playNote() {
+        if (!musicPlaying || !audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = notes[index % notes.length];
+        gain.gain.setValueAtTime(0.025, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.8);
+        index++;
+        musicInterval = setTimeout(playNote, 1400 + Math.random() * 500);
+    }
+    musicInterval = setTimeout(playNote, 400);
+}
         // ============================================================
         // THEME
         // ============================================================
